@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ЛФК</title>
+<meta name="description" content="Ежедневные упражнения для стоп, икр, голеностопа и кистей: план на день, анимация и таймер.">
+<meta name="theme-color" content="#F2F5F3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1513" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preload" href="fonts/golos-text-cyrillic-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/golos-text-cyrillic-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="app.css">
+<script type="importmap">
+{ "imports": {
+  "three": "./lib/three.module.min.js",
+  "three/addons/": "./lib/addons/"
+} }
+</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="cue-fill"/>
+    </marker>
+  </defs>
+</svg>
+
+<div id="storage-warn" class="storage-warn" role="alert" hidden>
+  <b>Отметки не сохранятся.</b> Хранилище телефона недоступно, поэтому всё записанное пропадёт после закрытия приложения. Так бывает в режиме инкогнито: открой приложение в обычном окне.
+</div>
+<main id="app" class="wrap" tabindex="-1"></main>
+
+<nav class="tabbar" aria-label="Разделы">
+  <a href="#today" data-tab="today">Сегодня</a>
+  <a href="#rules" data-tab="rules">Правила</a>
+</nav>
+
+<script type="module" src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  }
+</script>
+</body>
+</html>

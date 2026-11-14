@@ -1,0 +1,270 @@
+<title>Повороты предплечья</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&display=swap">
+<style>
+/* Одна колонка, как памятка физиотерапевта: сверху живая сцена с управлением, ниже шаги и дозировка */
+:root {
+  --bg: #F2F5F3;
+  --surface: #FFFFFF;
+  --ink: #15211C;
+  --muted: #56665E;
+  --line: #D5DED9;
+  --chip: #E4ECE7;
+  --accent: #1F7A5C;
+  --accent-ink: #FFFFFF;
+  --cue: #E0761C;
+  --cue-text: #9E4D0A;
+  --stage: #E6EDE9;
+  --floor: #D2DCD7;
+  --overlay: rgba(255, 255, 255, .86);
+  --f-body: "Golos Text", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1513; --surface: #161F1B; --ink: #E5EDE9; --muted: #9AABA3; --line: #2B3833; --chip: #212D28;
+    --accent: #4DC59D; --accent-ink: #062419; --cue: #F39A4A; --cue-text: #F6B47A;
+    --stage: #1A2420; --floor: #26332E; --overlay: rgba(22, 31, 27, .86);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1513; --surface: #161F1B; --ink: #E5EDE9; --muted: #9AABA3; --line: #2B3833; --chip: #212D28;
+  --accent: #4DC59D; --accent-ink: #062419; --cue: #F39A4A; --cue-text: #F6B47A;
+  --stage: #1A2420; --floor: #26332E; --overlay: rgba(22, 31, 27, .86);
+  color-scheme: dark;
+}
+
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 var(--f-body); }
+.wrap {
+  max-width: 720px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 56px;
+  display: grid; gap: 22px;
+}
+.eyebrow { margin: 0; font-size: 13px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 4px 0 0; font-size: clamp(28px, 7vw, 38px); line-height: 1.12; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+h2 { margin: 0; font-size: 20px; line-height: 1.25; font-weight: 600; text-wrap: balance; }
+p { margin: 0; }
+.specs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.spec { font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; background: var(--chip); padding: 4px 10px; border-radius: 999px; }
+
+/* сцена */
+.stage-card { display: grid; gap: 10px; }
+.stage {
+  position: relative; width: 100%; max-width: 100%; aspect-ratio: 1 / 1;
+  background: var(--stage); border-radius: 16px; overflow: hidden;
+}
+@media (min-width: 640px) { .stage { aspect-ratio: 4 / 3; } }
+.stage canvas { cursor: grab; }
+.stage canvas:active { cursor: grabbing; }
+.hud { position: absolute; inset: 10px 10px auto 10px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; pointer-events: none; }
+.pill {
+  background: var(--overlay); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  border-radius: 999px; padding: 6px 12px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.pill.phase { display: inline-flex; align-items: center; gap: 8px; }
+.pill.phase svg { width: 16px; height: 16px; flex: none; transition: transform .25s ease; }
+.pill.phase.down svg { transform: rotate(180deg); }
+.pill.count { font-weight: 500; }
+.fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
+
+.views { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg {
+  font: 500 15px/1 var(--f-body); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; cursor: pointer;
+}
+.seg[aria-pressed="true"] { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+.controls { display: flex; gap: 6px 12px; flex-wrap: wrap; align-items: center; }
+.hint { font-size: 14px; color: var(--muted); }
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.icon-btn {
+  position: absolute; right: 10px; bottom: 10px; width: 44px; height: 44px; padding: 0;
+  border: 0; border-radius: 999px; background: var(--overlay); color: var(--ink);
+  display: grid; place-items: center; cursor: pointer;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.icon-btn svg { width: 20px; height: 20px; fill: currentColor; }
+
+.legend { display: grid; gap: 6px; font-size: 15px; }
+.legend div { display: flex; gap: 10px; align-items: baseline; }
+.sw { flex: none; width: 12px; height: 12px; border-radius: 999px; transform: translateY(1px); }
+.sw.cue { background: var(--cue); }
+
+details.words { border-top: 1px solid var(--line); padding-top: 14px; }
+details.words summary {
+  cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 10px;
+  font-size: 16px; font-weight: 500; color: var(--muted);
+}
+details.words summary::-webkit-details-marker { display: none; }
+details.words summary::before {
+  content: ""; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg); transition: transform .2s ease;
+}
+details.words[open] summary::before { transform: rotate(45deg); }
+details.words ol { margin-top: 12px; }
+summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { details.words summary::before { transition: none; } }
+
+section { display: grid; gap: 10px; }
+ol.steps { margin: 0; padding-left: 1.4em; display: grid; gap: 8px; }
+ol.steps li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
+.watch { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.watch li { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.watch b { font-weight: 600; }
+.dose { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; }
+.dose .row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; }
+.dose .k { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .pill.phase svg { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Кисть · силовое · через день</p>
+    <h1>Повороты предплечья</h1>
+    <div class="specs">
+      <span class="spec">3 × 10–12</span>
+      <span class="spec">гантель за один конец</span>
+      <span class="spec">локти у боков</span>
+    </div>
+  </header>
+
+  <div class="stage-card">
+    <div class="stage" id="stage">
+      <div class="hud" aria-hidden="true">
+        <span class="pill phase" id="phase"><svg viewBox="0 0 16 16"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="phaseText">Ладонями вверх</span></span>
+        <span class="pill count" id="count">Повтор 1 из 10</span>
+      </div>
+      <div class="fallback" id="fallback" hidden>На этом устройстве не запускается 3D. Описание словами — внизу страницы.</div>
+      <button class="icon-btn" type="button" id="play" aria-label="Пауза">
+        <svg class="i-pause" viewBox="0 0 20 20" aria-hidden="true"><rect x="5" y="4" width="3.4" height="12" rx="1"/><rect x="11.6" y="4" width="3.4" height="12" rx="1"/></svg>
+        <svg class="i-play" viewBox="0 0 20 20" aria-hidden="true" hidden><path d="M6.5 4.3v11.4a.8.8 0 0 0 1.2.7l9-5.7a.8.8 0 0 0 0-1.4l-9-5.7a.8.8 0 0 0-1.2.7Z"/></svg>
+      </button>
+    </div>
+    <div class="views" role="group" aria-label="Ракурс">
+      <button class="seg" type="button" id="v-fp" data-view="fp" aria-pressed="true">От первого лица</button>
+      <button class="seg" type="button" id="v-side" data-view="side" aria-pressed="false">Сбоку</button>
+      <button class="seg" type="button" id="v-front" data-view="front" aria-pressed="false">Спереди</button>
+    </div>
+    <div class="controls">
+      <button class="seg" type="button" id="slow" aria-pressed="false">Медленнее</button>
+      <span class="hint">Проведи пальцем по картинке, чтобы повернуть вид</span>
+    </div>
+    <div class="legend">
+      <div><span class="sw cue"></span><span>Оранжевое кольцо — локоть прижат к боку. Оранжевая дуга — путь гантели.</span></div>
+    </div>
+  </div>
+
+  <section aria-labelledby="h-watch">
+    <h2 id="h-watch">Следи</h2>
+    <ul class="watch">
+      <li><b>Гантель держи за край ручки</b>, вплотную к диску. Второй диск торчит над большим пальцем: так нагрузка больше.</li>
+      <li><b>Локти касаются боков</b> всё время, руки не разводятся в стороны.</li>
+      <li><b>Крутится только предплечье.</b> Плечо стоит на месте.</li>
+      <li><b>Через боль нельзя.</b> Допустимо до 3 из 10, и к утру кисть не хуже, чем накануне.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="h-dose">
+    <h2 id="h-dose">Сколько</h2>
+    <div class="dose">
+      <div class="row"><span class="k">Подходы</span><span>3 подхода по 10–12 повторов</span></div>
+      <div class="row"><span class="k">Как часто</span><span>через день, 3–4 раза в неделю</span></div>
+      <div class="row"><span class="k">Вес</span><span>начинай с 0,5 кг, прибавляй по 0,5 кг, когда 3 подхода даются легко и утром не хуже</span></div>
+      <div class="row"><span class="k">Источник</span><span>План восстановления левой кисти, этап 2</span></div>
+    </div>
+  </section>
+
+  <details class="words" id="words">
+    <summary>Описание словами</summary>
+    <ol class="steps">
+      <li>Встань прямо, в каждой руке по гантели.</li>
+      <li>Возьми гантель за самый край ручки, вплотную к диску. Второй диск смотрит вверх, над большим пальцем.</li>
+      <li>Прижми локти к бокам и согни руки под прямым углом. Предплечья смотрят вперёд, параллельно полу.</li>
+      <li>Ладони смотрят друг на друга, большие пальцы сверху, гантели стоят вертикально.</li>
+      <li>Медленно поверни предплечья, пока ладони не посмотрят в потолок. Гантели наклонятся наружу.</li>
+      <li>Так же медленно поверни обратно и дальше, пока ладони не посмотрят в пол. Гантели наклонятся внутрь, друг к другу.</li>
+      <li>Ладони вверх и обратно вниз — это один повтор.</li>
+    </ol>
+  </details>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import { createStage } from './anim/stage.js';
+import { createMannequin } from './anim/mannequin.js';
+import exercise from './anim/poses/forearm-rotation.js';
+
+const REPS = 10; // нижняя граница диапазона 10–12
+const stageEl = document.getElementById('stage');
+const phaseEl = document.getElementById('phase');
+const phaseText = document.getElementById('phaseText');
+const countEl = document.getElementById('count');
+const playBtn = document.getElementById('play');
+const slowBtn = document.getElementById('slow');
+const viewBtns = [...document.querySelectorAll('[data-view]')];
+
+const stage = createStage(stageEl, { views: exercise.views, view: 'fp' });
+if (!stage) {
+  document.getElementById('fallback').hidden = false;
+  document.querySelector('.hud').hidden = true;
+  playBtn.hidden = true;
+  slowBtn.hidden = true;
+  document.getElementById('words').open = true;
+} else {
+  const m = createMannequin();
+  stage.scene.add(m.root);
+  exercise.setup(m);
+
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let playing = !reduce;
+  let speed = 1;
+  let t = 0;
+
+  function render() {
+    const s = exercise.apply(m, t);
+    phaseText.textContent = s.cue;
+    phaseEl.classList.toggle('down', s.cue === 'Ладонями вниз');
+    countEl.textContent = 'Повтор ' + ((s.rep % REPS) + 1) + ' из ' + REPS;
+  }
+  const iconPause = playBtn.querySelector('.i-pause');
+  const iconPlay = playBtn.querySelector('.i-play');
+  function syncPlay() {
+    iconPause.toggleAttribute('hidden', !playing);
+    iconPlay.toggleAttribute('hidden', playing);
+    playBtn.setAttribute('aria-label', playing ? 'Пауза' : 'Продолжить');
+  }
+  stage.onFrame((dt) => {
+    if (playing) { t += dt * speed; render(); }
+  });
+  stage.onView((name) => {
+    m.head.visible = name !== 'fp';
+    m.neck.visible = name !== 'fp';
+    viewBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+  });
+  stage.setView('fp', false);
+  render();
+  syncPlay();
+
+  viewBtns.forEach((b) => b.addEventListener('click', () => stage.setView(b.dataset.view)));
+  playBtn.addEventListener('click', () => { playing = !playing; syncPlay(); });
+  slowBtn.addEventListener('click', () => {
+    speed = speed === 1 ? 0.5 : 1;
+    slowBtn.setAttribute('aria-pressed', String(speed !== 1));
+  });
+
+  // Отладка: ?t=1.25 — замереть в нужной фазе, ?view=side — ракурс.
+  const q = new URLSearchParams(location.search);
+  if (q.has('t')) { t = Number(q.get('t')) || 0; playing = false; render(); syncPlay(); }
+  if (q.has('view')) stage.setView(q.get('view'), false);
+  if (q.has('debug')) window.__lfk = { m, stage };
+}
+</script>
