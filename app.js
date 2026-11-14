@@ -1,5 +1,5 @@
 // Приложение ЛФК: экраны «Сегодня», плеер упражнения и «Правила». Маршрут — в адресе после #.
-import { EXERCISES, WEIGHT_RULE, BAND_NAMES } from './data/exercises.js';
+import { EXERCISES, WEIGHT_RULE, WEIGHT_START, BAND_NAMES } from './data/exercises.js';
 import { PROGRAM } from './data/program.js';
 import { PROFILE } from './data/profile.js';
 import { SOURCES } from './data/sources.js';
@@ -140,6 +140,9 @@ async function toggleDone(id, isDone) {
 // Возврат из упражнения на «Сегодня» — к тому же месту списка, а не в начало.
 let lastRoute = '';
 let todayScroll = 0;
+// Раскрытые «Показать упражнения» в группах, где сегодня отдых. Помним, пока открыто приложение:
+// иначе после выхода из упражнения список закрывается, и место в нём теряется.
+const moreOpen = new Set();
 
 async function route() {
   cleanup?.();
@@ -185,6 +188,10 @@ app.addEventListener('change', (e) => {
 app.addEventListener('toggle', (e) => {
   const d = e.target;
   if (d.matches?.('details.part')) kvSet(`open:${d.dataset.part}`, d.open);
+  if (d.matches?.('details.more[data-group]')) {
+    if (d.open) moreOpen.add(d.dataset.group);
+    else moreOpen.delete(d.dataset.group);
+  }
 }, true);
 
 window.addEventListener('scroll', () => document.body.classList.toggle('scrolled', window.scrollY > 4), { passive: true });
@@ -242,9 +249,10 @@ async function renderToday(token) {
       const list = `<ol class="ex-list">${g.items.map((id) => exItem(exs[id], doneToday.has(id))).join('')}</ol>`;
       const head = g.title ? `<h3 class="group-title">${esc(g.title)}</h3>` : '';
       const notes = [g.rest ? '' : g.courseNote, g.note, g.later, g.replacedNote].filter(Boolean).map((n) => `<p class="group-note">${esc(n)}</p>`).join('');
+      const key = `${p.id}:${g.id}`;
       const body = g.rest
         ? `<p class="rest">${esc(g.restText || 'Сегодня отдых: силовые были вчера. Следующие — завтра.')}</p>
-           <details class="more"><summary>Показать упражнения</summary>${list}</details>`
+           <details class="more" data-group="${esc(key)}"${moreOpen.has(key) ? ' open' : ''}><summary>Показать упражнения</summary>${list}</details>`
         : list;
       return `<div class="group">${head}${notes}${body}</div>`;
     }).join('');
@@ -410,13 +418,15 @@ function doseBlock(ex) {
     if (ex.nextStage) rows.push(['Дальше', `с ${ex.nextStage.from}-го занятия — ${esc(lowerFirst(ex.nextStage.name))}`]);
   }
   if (ex.progression) rows.push(['Дальше', esc(ex.progression)]);
-  if (ex.weight) rows.push(['Вес', esc(WEIGHT_RULE)]);
+  if (ex.weight) rows.push(['Вес', esc(WEIGHT_START)]);
   if (src) rows.push(['Источник', srcLink(src)]);
+  // Полное правило про вес длинное: в таблице оно растягивало строку на пол-экрана.
+  const weight = ex.weight ? `<details class="more"><summary>Как подбирать вес</summary><p>${esc(WEIGHT_RULE)}</p></details>` : '';
   const scale = ex.norms
     ? `<div class="dose"><b>Как читать результат</b><div class="scale">${ex.norms.map(([v, t]) => `<div class="row"><span class="v">${esc(v)}</span><span>${esc(t)}</span></div>`).join('')}</div></div>`
     : '';
   return `<section aria-labelledby="h-dose"><h2 id="h-dose">Сколько</h2>
-    <div class="dose">${rows.map(([k, v]) => `<div class="row"><span class="k">${k}</span><span>${v}</span></div>`).join('')}</div>
+    <div class="dose">${rows.map(([k, v]) => `<div class="row"><span class="k">${k}</span><span>${v}</span></div>`).join('')}${weight}</div>
     ${scale}
   </section>`;
 }
@@ -609,6 +619,7 @@ async function renderPlayer(id, token) {
         stageEl.insertBefore(stageEl.querySelector('canvas'), stageEl.firstChild);
         m = createMannequin();
         stage.scene.add(m.root);
+        stage.setSubject(m.root);
         pose.setup(m, stage.scene, stage, ex);
         const viewsEl = document.getElementById('views');
         viewsEl.innerHTML = Object.entries(pose.views).map(([k, v]) => `<button class="seg" type="button" data-view="${k}" aria-pressed="false">${esc(v.label)}</button>`).join('');
@@ -847,10 +858,10 @@ function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipE
     else if (st.side < plan.sides.length - 1) { st.side += 1; st.set = 0; soundFor('setEnd'); }
     else runner.finishNow();
   }
-  function countLabel(st) {
+  // На кнопке коротко. Какой подход и какая нога — на плашке анимации и под крупным счётом.
+  function countLabel() {
     const plan = runner.plan;
-    const where = [plan.sets > 1 ? `подход ${st.set + 1} из ${plan.sets}` : '', plan.sides.length > 1 ? lowerFirst(plan.sides[st.side]) : ''].filter(Boolean);
-    return where.length ? `Сделал: ${where.join(', ')}` : 'Сделал';
+    return plan.sets > 1 || plan.sides.length > 1 ? 'Сделал подход' : 'Сделал';
   }
 
   setStageTap(() => {
@@ -929,6 +940,7 @@ function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipE
       if (running && isCount) {
         n = String(plan.reps);
         word = plural(plan.reps, ['повтор', 'повтора', 'повторов']);
+        sub = where.toLowerCase();
       } else if (timed) {
         word = runner.phase.label;
         if (plan.type === 'tempo') n = `${rep}<small>/${plan.reps}</small>`;
@@ -953,8 +965,8 @@ function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipE
     }
 
     // нижние кнопки
-    if (st.status === 'ready') setActions(['Пропустить', skipEx], isCount ? [countLabel(st), countSetDone] : ['Начать', start]);
-    else if (st.status === 'run') setActions(null, isCount ? [countLabel(st), countSetDone] : ['Пауза', () => runner.pause()]);
+    if (st.status === 'ready') setActions(['Пропустить', skipEx], isCount ? [countLabel(), countSetDone] : ['Начать', start]);
+    else if (st.status === 'run') setActions(null, isCount ? [countLabel(), countSetDone] : ['Пауза', () => runner.pause()]);
     else if (st.status === 'paused') setActions(['Сначала', restart], ['Продолжить', start]);
     else if (st.status === 'between') {
       const nextSide = st.set >= plan.sets - 1 ? plan.sides[st.side + 1] : null;

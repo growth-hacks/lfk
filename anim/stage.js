@@ -137,11 +137,103 @@ export function createStage(container, { views = {}, view = Object.keys(views)[0
     l.line.style.display = d;
     l.dot.style.display = d;
   };
+  // Рамка вокруг человека на экране: подписи стараются лечь мимо неё — в свободную полосу под ним или над ним.
+  // Кроме общей рамки — рамка каждой детали манекена: по ним видно, где у края сцены свободно.
+  let subject = null;
+  const _v = new THREE.Vector3();
+  function subjectRects(w, h) {
+    if (!subject) return null;
+    const rects = [];
+    const box = { l: Infinity, t: Infinity, r: -Infinity, b: -Infinity };
+    subject.traverseVisible((o) => {
+      if (!o.isMesh || !o.geometry) return;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      const { min, max } = o.geometry.boundingBox;
+      const q = { l: Infinity, t: Infinity, r: -Infinity, b: -Infinity };
+      for (let i = 0; i < 8; i += 1) {
+        _v.set(i & 1 ? max.x : min.x, i & 2 ? max.y : min.y, i & 4 ? max.z : min.z).applyMatrix4(o.matrixWorld).project(camera);
+        if (_v.z > 1) continue;
+        const x = ((_v.x + 1) / 2) * w;
+        const y = ((1 - _v.y) / 2) * h;
+        q.l = Math.min(q.l, x); q.r = Math.max(q.r, x); q.t = Math.min(q.t, y); q.b = Math.max(q.b, y);
+      }
+      if (q.l >= q.r) return;
+      rects.push(q);
+      box.l = Math.min(box.l, q.l); box.r = Math.max(box.r, q.r); box.t = Math.min(box.t, q.t); box.b = Math.max(box.b, q.b);
+    });
+    return rects.length ? { box, rects } : null;
+  }
+  const overlap = (x, y, l, rects) => {
+    let s = 0;
+    for (const q of rects) {
+      const dx = Math.min(x + l.w, q.r) - Math.max(x, q.l);
+      const dy = Math.min(y + l.h, q.b) - Math.max(y, q.t);
+      if (dx > 0 && dy > 0) s += dx * dy;
+    }
+    return s;
+  };
+
+  const M = 8; // отступ от края сцены
+  const TOP = 48; // сверху плашки фазы и стороны
+  // Подписи в один-два ряда в полосе под человеком или над ним, каждая — под своей точкой, насколько можно.
+  function placeInBand(list, box, w, h) {
+    const rowH = Math.max(...list.map((l) => l.h)) + 4;
+    const meanY = list.reduce((s, l) => s + l.ay, 0) / list.length;
+    const bands = [
+      { y0: box.b + 6, y1: h - M, down: true },
+      { y0: TOP, y1: box.t - 6, down: false },
+    ].filter((band) => band.y1 - band.y0 + 4 >= rowH)
+      .sort((a, b) => Math.abs((a.y0 + a.y1) / 2 - meanY) - Math.abs((b.y0 + b.y1) / 2 - meanY));
+    const sorted = [...list].sort((a, b) => a.ax - b.ax);
+    for (const band of bands) {
+      const nRows = Math.floor((band.y1 - band.y0 + 4) / rowH);
+      const edge = band.down ? w - 56 : w - M; // внизу справа — значок паузы
+      let row = 0;
+      let right = M;
+      for (const l of sorted) {
+        const want = Math.min(Math.max(l.ax - l.w / 2, M), edge - l.w);
+        let x = Math.max(want, right);
+        if (x + l.w > edge) { row += 1; x = want; }
+        l.x = x;
+        l.row = row;
+        right = x + l.w + 6;
+      }
+      if (row >= nRows) continue;
+      for (const l of sorted) l.y = band.down ? band.y0 + l.row * rowH : band.y1 - (l.row + 1) * rowH + 4;
+      return true;
+    }
+    return false;
+  }
+  // Запасной вариант, если полосы нет: подписи у левого и правого края. Высоту каждой подбираем так,
+  // чтобы она меньше всего закрывала человека и точки, была поближе к своей точке и не прыгала от кадра к кадру.
+  function placeInColumns(list, w, h, rects) {
+    const dots = list.map((l) => ({ l: l.ax - 8, r: l.ax + 8, t: l.ay - 8, b: l.ay + 8 }));
+    const paused = { l: w - 56, r: w, t: h - 60, b: h }; // значок паузы в правом нижнем углу
+    const obstacles = rects.concat(dots, paused);
+    const cols = [list.filter((l) => l.ax < w / 2), list.filter((l) => l.ax >= w / 2)];
+    cols.forEach((col, right) => {
+      col.sort((a, b) => a.ay - b.ay);
+      let floorY = TOP;
+      for (const l of col) {
+        const x = right ? w - M - l.w : M;
+        const hi = h - M - l.h;
+        let best = Math.min(Math.max(l.ay - l.h / 2, floorY), hi);
+        let bestCost = Infinity;
+        for (let y = Math.min(floorY, hi); y <= hi; y += 3) {
+          const cost = overlap(x, y, l, obstacles) + 4 * Math.abs(y + l.h / 2 - l.ay) + (l.y == null ? 0 : 3 * Math.abs(y - l.y));
+          if (cost < bestCost) { bestCost = cost; best = y; }
+        }
+        floorY = best + l.h + 4;
+        l.x = x;
+        l.y = best;
+      }
+    });
+  }
   function placeLabels() {
     if (labelLayer.hidden) return;
     const w = container.clientWidth;
     const h = container.clientHeight;
-    const cols = [[], []];
+    const list = [];
     for (const l of labels) {
       _p.copy(l.pos).project(camera);
       const on = l.visible && _p.z < 1 && Math.abs(_p.x) < 1.05 && Math.abs(_p.y) < 1.05;
@@ -150,31 +242,23 @@ export function createStage(container, { views = {}, view = Object.keys(views)[0
       if (l.text !== l.el.textContent) { l.text = l.el.textContent; l.w = l.el.offsetWidth; l.h = l.el.offsetHeight; }
       l.ax = ((_p.x + 1) / 2) * w;
       l.ay = ((1 - _p.y) / 2) * h;
-      cols[l.ax < w / 2 ? 0 : 1].push(l);
+      list.push(l);
     }
-    const M = 8;
-    cols.forEach((col, right) => {
-      col.sort((a, b) => a.ay - b.ay);
-      let floorY = M;
-      for (const l of col) {
-        const x = right ? w - M - l.w : M;
-        // точка у самого края попала бы под подпись — тогда подпись встаёт над точкой (или под ней)
-        const covers = l.ax > x - 10 && l.ax < x + l.w + 10;
-        let y = covers ? l.ay - l.h - 16 : l.ay - l.h / 2;
-        if (covers && y < M) y = l.ay + 16;
-        y = Math.min(Math.max(y, floorY), h - M - l.h);
-        floorY = y + l.h + 4;
-        l.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
-        const ex = covers ? Math.min(Math.max(l.ax, x + 8), x + l.w - 8) : (right ? x : x + l.w);
-        const ey = covers ? (y > l.ay ? y : y + l.h) : y + l.h / 2;
-        l.line.setAttribute('x1', l.ax.toFixed(1));
-        l.line.setAttribute('y1', l.ay.toFixed(1));
-        l.line.setAttribute('x2', ex.toFixed(1));
-        l.line.setAttribute('y2', ey.toFixed(1));
-        l.dot.setAttribute('cx', l.ax.toFixed(1));
-        l.dot.setAttribute('cy', l.ay.toFixed(1));
-      }
-    });
+    if (!list.length) return;
+    const s = subjectRects(w, h);
+    if (!s || !placeInBand(list, s.box, w, h)) placeInColumns(list, w, h, s?.rects || []);
+    for (const l of list) {
+      l.el.style.transform = `translate(${l.x.toFixed(1)}px, ${l.y.toFixed(1)}px)`;
+      // линия — от точки к ближайшему месту на краю подписи
+      const ex = Math.min(Math.max(l.ax, l.x + 8), l.x + l.w - 8);
+      const ey = Math.min(Math.max(l.ay, l.y), l.y + l.h);
+      l.line.setAttribute('x1', l.ax.toFixed(1));
+      l.line.setAttribute('y1', l.ay.toFixed(1));
+      l.line.setAttribute('x2', ex.toFixed(1));
+      l.line.setAttribute('y2', ey.toFixed(1));
+      l.dot.setAttribute('cx', l.ax.toFixed(1));
+      l.dot.setAttribute('cy', l.ay.toFixed(1));
+    }
   }
   // Подписи нужны, пока разбираешься в упражнении; во время подхода их прячем.
   function setLabelsVisible(on) { labelLayer.hidden = !on; }
@@ -210,6 +294,7 @@ export function createStage(container, { views = {}, view = Object.keys(views)[0
     get view() { return current; },
     label,
     setLabelsVisible,
+    setSubject: (obj) => { subject = obj; },
     onFrame: (fn) => frameListeners.push(fn),
     onView: (fn) => viewListeners.push(fn),
     dispose() {

@@ -67,7 +67,8 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-top: calc(env(safe-area-inset-top, 0px) + 18px);
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
-  display: grid; gap: 22px;
+  /* minmax(0, 1fr): колонка не шире экрана, даже если внутри 3D-сцена или длинное слово */
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px;
 }
 body.player .wrap { gap: 12px; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); }
 
@@ -263,11 +264,12 @@ body.player h2 { font-size: 17px; }
 .stepper .lbl { color: var(--muted); font-size: 15px; }
 .stepper .ctl { display: inline-flex; align-items: center; gap: 4px; }
 .stepper .val { min-width: 64px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
-.stepper button {
+/* только «−» и «+»: кнопка «Медленнее» в той же строке сохраняет свою ширину */
+.stepper .ctl button {
   width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg);
   font-size: 20px; line-height: 1; cursor: pointer; display: grid; place-items: center;
 }
-.stepper button:disabled { opacity: .35; cursor: default; }
+.stepper .ctl button:disabled { opacity: .35; cursor: default; }
 .done-note { color: var(--accent); font-weight: 600; }
 .goals.locked { opacity: .45; pointer-events: none; }
 
@@ -289,8 +291,9 @@ body.player h2 { font-size: 17px; }
 .foryou { background: var(--cue-soft); border-radius: 12px; padding: 10px 14px; }
 .foryou .tag { display: block; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--cue-text); margin-bottom: 2px; }
 .dose { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; }
-.dose .row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; }
+.dose .row { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px; }
 .dose .k { color: var(--muted); }
+.dose details.more p { margin-top: 6px; font-size: 15px; }
 ol.steps { margin: 0; padding-left: 1.4em; display: grid; gap: 8px; }
 ol.steps li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
 .scale { display: grid; gap: 6px; }
