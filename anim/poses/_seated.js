@@ -32,7 +32,7 @@ export function makeSeated(kind) {
     legend: {
       short: 'Оранжевые стрелки: свод поднимается, подушечка тянется к пятке. Полупрозрачным — стопа до начала.',
       yoga: 'Оранжевым — пальцы, которые поднимаются. Остальные прижаты к полу.',
-      spread: 'Полупрозрачным — где пальцы были. Оранжевым — куда разошлись. Стопа стоит на месте.',
+      spread: 'Оранжевым — пальцы, которые расходятся. Стопа стоит на месте.',
     }[kind],
     views: VIEWS[kind],
     setup(m, scene, stage) {
@@ -50,9 +50,7 @@ export function makeSeated(kind) {
           labels.arch = stage.label('свод');
         }
       }
-      if (kind === 'spread') {
-        ghosts = [m.legs.R.foot.addGhostToes(m.materials.ghost), m.legs.L.foot.addGhostToes(m.materials.ghost)];
-      }
+      // у разведения пальцев полупрозрачных «призраков» нет: путали цветом (feedback 11.11, п. 5)
       if (kind === 'yoga' && stage) labels.big = stage.label('большой палец');
     },
     pose(m, s) {

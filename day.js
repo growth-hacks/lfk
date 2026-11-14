@@ -99,6 +99,13 @@ export function pickStage(stages, session) {
   return { idx, at, last, done: session > last };
 }
 
+// Личная пометка «Для тебя»: строка — всегда; { text, when } — только на подходящем уровне курса.
+export function noteFor(note, stage, stageIndex) {
+  if (!note) return '';
+  if (typeof note === 'string') return note;
+  return note.when && !note.when(stage, stageIndex) ? '' : note.text;
+}
+
 // Уровень с личными заменами: подушка вместо доски, свои ленты.
 export function stageView(S, profile = {}, bandNames = []) {
   const v = { ...S };

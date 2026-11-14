@@ -10,6 +10,7 @@ const WALL = -0.64;
 export function makeCalf({ bent }) {
   let arrows = null;
   let zones = null;
+  let kneeLabel = null;
   const S = bent
     ? { back: 0.0, front: -0.30, p0: v3(0, 0.875, -0.12), p1: v3(0, 0.80, -0.17), lean0: -4, lean1: -7, wristY: [1.3, 1.25] }
     : { back: 0.30, front: -0.30, p0: v3(0, 0.87, 0.0), p1: v3(0, 0.83, -0.10), lean0: -8, lean1: -15, wristY: [1.33, 1.3] };
@@ -23,8 +24,10 @@ export function makeCalf({ bent }) {
       back: { label: 'Сзади', pos: [1.25, 1.45, 1.95], target: [0, 0.75, -0.2], fov: 38 },
       other: { label: 'С другой стороны', pos: [-2.5, 1.05, -0.2], target: [0, 0.78, -0.18], fov: 36 },
     },
-    setup(m, scene) {
+    setup(m, scene, stage) {
       scene.add(wall({ front: WALL }));
+      // прямое колено легко пропустить: автор сначала делал с согнутым (feedback 11.11, п. 2)
+      kneeLabel = !bent && stage ? stage.label('колено прямое') : null;
       zones = {};
       arrows = { heel: cueArrow(m.materials.cue), knee: cueArrow(m.materials.cue) };
       for (const k of ['R', 'L']) {
@@ -60,6 +63,10 @@ export function makeCalf({ bent }) {
       zones[backKey].material.opacity = 0.15 + 0.45 * k;
       const heel = footPoint(m.legs[backKey], 0, -0.02, 0.07);
       pointArrow(arrows.heel, heel.add(v3(0, 0.02, 0.045)), v3(0, -1, 0));
+      if (kneeLabel) {
+        m.legs[backKey].knee.updateWorldMatrix(true, false);
+        kneeLabel.set(m.legs[backKey].knee.getWorldPosition(new THREE.Vector3()));
+      }
       if (bent) {
         m.legs[backKey].knee.updateWorldMatrix(true, false);
         const kn = m.legs[backKey].knee.getWorldPosition(new THREE.Vector3());

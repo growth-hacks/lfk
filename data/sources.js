@@ -10,4 +10,11 @@ export const SOURCES = {
   hupperets2008: { title: 'Расписание 24 занятий баланса — протокол 2BFit, 2008', url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC2412867/' },
   docherty1998: { title: 'Лента для голеностопа — Docherty 1998', url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC1320579/' },
   smith2012: { title: 'Натяжение ленты — Smith 2012', url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC3392158/' },
+  // Подсказки к технике: само упражнение — из источника выше, детали — из памяток и методичек.
+  roh: { title: 'Растяжка икр — памятка Royal Orthopaedic Hospital (NHS, Великобритания)', url: 'https://roh.nhs.uk/services-information/foot-and-ankle/calf-stretching' },
+  latey2020: { title: '«Короткая стопа» без сгибания пальцев — Latey 2020', url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC7359285' },
+  prehabShort: { title: '«Короткая стопа» сидя — методичка физиотерапевтов The Prehab Guys', url: 'https://theprehabguys.com/vimeo-video/seated-short-foot-arch-lift/' },
+  prehabToes: { title: 'Подъём пальцев по отдельности — методичка физиотерапевтов The Prehab Guys', url: 'https://theprehabguys.com/vimeo-video/isolated-toe-extension/' },
+  lyt: { title: 'Упражнения для мышц стопы — физиотерапевт Thalia Wynne, LYT Yoga', url: 'https://lytyoga.com/four-simple-intrinsic-foot-exercises-for-happy-feet/' },
+  joeNimble: { title: 'Йога для пальцев — Joe Nimble (производитель обуви)', url: 'https://www.joe-nimble.com/int/discover/big-toe-education/education/exercises/toega/' },
 };

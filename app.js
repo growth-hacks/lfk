@@ -8,7 +8,7 @@ import { RULES, HAND_RULES, STOP_SIGNS, DISCLAIMER } from './data/rules.js';
 import { NEED } from './data/equipment.js';
 import { kvGet, kvSet, kvAll, logAdd, logAll, logDelete, today, storageOk, replaceAll } from './store.js';
 import { makeBackup, parseBackup, backupFileName } from './backup.js';
-import { computeDay as computeDayFor, plural, pickStage, stageView as stageViewFor } from './day.js';
+import { computeDay as computeDayFor, plural, pickStage, noteFor, stageView as stageViewFor } from './day.js';
 import { buildPlan, estimate, createRunner, unlockAudio, soundFor, keepAwake, setMuted, isMuted } from './timer.js';
 
 const app = document.getElementById('app');
@@ -385,7 +385,7 @@ let settingsOpenFor = '';
 
 // «Для тебя» — первым пунктом «Следи»: личные замены нельзя пропустить.
 function watchBlock(ex) {
-  const note = PROFILE.notes[ex.id];
+  const note = noteFor(PROFILE.notes[ex.id], ex.stage, ex.stageIndex);
   const mine = note ? `<li class="foryou"><span class="tag">Для тебя</span>${esc(note)}</li>` : '';
   if (!ex.watch?.length) return mine ? `<ul class="watch">${mine}</ul>` : '';
   return `<section aria-labelledby="h-watch"><h2 id="h-watch">Следи</h2>
@@ -415,11 +415,16 @@ function doseBlock(ex) {
   if (ex.stage) {
     rows.push(['Занятие', ex.courseDone ? `курс из ${ex.courseTotal} занятий пройден` : `${ex.session} из ${ex.courseTotal}`]);
     rows.push(['Сейчас', esc(ex.stage.name)]);
-    if (ex.nextStage) rows.push(['Дальше', `с ${ex.nextStage.from}-го занятия — ${esc(lowerFirst(ex.nextStage.name))}`]);
+    if (ex.nextStage && !ex.courseDone) {
+      const left = ex.nextStage.from - ex.session;
+      rows.push(['Дальше', `${esc(lowerFirst(ex.nextStage.name))} — с ${ex.nextStage.from}-го занятия, через ${left} ${plural(left, ['занятие', 'занятия', 'занятий'])}`]);
+    }
   }
   if (ex.progression) rows.push(['Дальше', esc(ex.progression)]);
   if (ex.weight) rows.push(['Вес', esc(WEIGHT_START)]);
   if (src) rows.push(['Источник', srcLink(src)]);
+  // Откуда подсказки «Следи» и «Совет», если их нет в основном источнике.
+  if (ex.cues?.length) rows.push(['Подсказки', ex.cues.map((k) => srcLink(SOURCES[k])).join('<br>')]);
   // Полное правило про вес длинное: в таблице оно растягивало строку на пол-экрана.
   const weight = ex.weight ? `<details class="more"><summary>Как подбирать вес</summary><p>${esc(WEIGHT_RULE)}</p></details>` : '';
   const scale = ex.norms
@@ -544,7 +549,8 @@ async function renderPlayer(id, token) {
   const demoOnly = isMeasure || isFree;
   const need = needOf(ex);
   const settings = demoOnly ? '' : settingsBox(ex);
-  const course = ex.stage ? (ex.courseDone ? 'курс пройден' : `занятие ${ex.session} из ${ex.courseTotal}`) : '';
+  // Уровень («на полу», «на подушке») уже есть в строке цели — здесь только номер занятия.
+  const course = ex.stage ? (ex.courseDone ? 'курс пройден' : `занятие ${ex.session} из ${ex.courseTotal}`) : '';
 
   app.innerHTML = `
     ${topBar(true, crumb)}
