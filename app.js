@@ -206,7 +206,7 @@ app.addEventListener('change', (e) => {
 });
 app.addEventListener('toggle', (e) => {
   const d = e.target;
-  if (d.matches?.('details.part')) kvSet(`open:${d.dataset.part}`, d.open);
+  if (d.matches?.('details.part')) kvSet(`open:${d.dataset.part}`, d.open ? today() : '');
   if (d.matches?.('details.more[data-group]')) {
     if (d.open) moreOpen.add(d.dataset.group);
     else moreOpen.delete(d.dataset.group);
@@ -249,7 +249,8 @@ async function renderToday(token) {
     sec[id] = estimate(ex.timer, await getGoals(ex), relax);
   }
   const open = {};
-  for (const p of parts) open[p.id] = await kvGet(`open:${p.id}`, true);
+  // Разделы свёрнуты в начале дня; раскрытый остаётся раскрытым до вечера (в kv — дата, когда раскрыли).
+  for (const p of parts) open[p.id] = (await kvGet(`open:${p.id}`, '')) === today();
   if (token !== renderToken) return;
 
   const head = (more = '') => `${topBar(false)}

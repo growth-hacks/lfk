@@ -59,21 +59,21 @@ export const PROGRAM = [
 
 // Программы для плана: у каждой своя частота. Обычно программа — раздел целиком,
 // у кисти две: разминка с чувством положения идут каждый день, силовые — через день.
-// hint — частота из источника, только подсказка: выбирает пользователь. Нет hint — в источнике частоты нет.
-//   mode: 'daily' | 'alternate' | 'week'; perWeek — сколько раз в неделю для 'week'.
+// hint — частота из источника (2BFit и Docherty, личный план кисти), только подсказка: выбирает пользователь.
+//   Нет hint — в источнике частоты нет. perWeek — больше этого числа дней в неделю — предупреждение.
 export const UNITS = [
   { id: 'calves', part: 'calves', title: 'Икры', groups: ['calves-all'] },
   { id: 'feet', part: 'feet', title: 'Стопа', groups: ['feet-all'] },
   {
     id: 'ankle', part: 'ankle', title: 'Голеностоп', groups: ['ankle-balance', 'ankle-band'],
-    hint: { mode: 'week', perWeek: 3, text: '3 раза в неделю', by: 'программы 2BFit и Docherty' },
+    hint: { perWeek: 3, text: 'Программа рассчитана на 3 раза в неделю.' },
   },
   {
     id: 'hand', part: 'hand', title: 'Кисть: разминка и чувство положения', short: 'Разминка и чувство положения', groups: ['hand-warmup', 'hand-sense'],
-    hint: { mode: 'daily', text: 'каждый день', by: 'план восстановления кисти' },
+    hint: { text: 'Рекомендуется каждый день.' },
   },
   {
     id: 'hand-strength', part: 'hand', title: 'Кисть: силовые', short: 'Силовые', groups: ['hand-strength'],
-    hint: { mode: 'alternate', text: 'через день, 3–4 раза в неделю', by: 'план восстановления кисти' },
+    hint: { text: 'Рекомендуется через день, 3–4 раза в неделю.' },
   },
 ];

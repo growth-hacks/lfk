@@ -54,7 +54,12 @@ export function unitState(entry, ids, log, t, yesterday, wd) {
   if (did(t)) return { status: 'today', text: '' };
   switch (mode) {
     case 'daily': return { status: 'today', text: '' };
-    case 'alternate': return did(yesterday) ? { status: 'rest', text: 'через день: следующее занятие завтра' } : { status: 'today', text: '' };
+    case 'alternate': {
+      // начало можно отложить на завтра, чтобы программы «через день» чередовались, а не шли в один день
+      const wait = entry.start && entry.start > t ? daysBetween(t, entry.start) : 0;
+      if (wait) return { status: 'rest', text: `начнёшь ${wait === 1 ? 'завтра' : WEEKDAY_TO[(wd + wait) % 7]}` };
+      return did(yesterday) ? { status: 'rest', text: 'через день: следующее занятие завтра' } : { status: 'today', text: '' };
+    }
     case 'week': return days.includes(wd) ? { status: 'today', text: '' } : { status: 'rest', text: `по плану — ${nextDay(days, wd)}` };
     case 'off': return { status: 'off', text: 'не в плане' };
     default: return { status: 'unset', text: 'частота не выбрана' };
@@ -63,7 +68,7 @@ export function unitState(entry, ids, log, t, yesterday, wd) {
 
 // Что положено в день now. Чистая функция: программа, упражнения, журнал, план и дата приходят на вход —
 // так её можно проверить на любой день.
-//   plan: { units: { [программа]: { mode, days } }, order: [раздел…], hidden: [упражнение…] }.
+//   plan: { units: { [программа]: { mode, days, start } }, order: [раздел…], hidden: [упражнение…] }.
 export function computeDay({ program, units = [], exercises, log, plan = {}, now = new Date() }) {
   const t = today(now);
   const yesterday = today(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
