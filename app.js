@@ -1,6 +1,7 @@
 // Приложение ЛФК: экраны «Сегодня», плеер упражнения и «Правила». Маршрут — в адресе после #.
 import { EXERCISES, WEIGHT_RULE, WEIGHT_START, BAND_NAMES } from './data/exercises.js';
-import { PROGRAM } from './data/program.js';
+import { PROGRAM, UNITS } from './data/program.js';
+import { loadPlan, getPlan, renderPlan, wirePlan } from './plan.js';
 import { PROFILE } from './data/profile.js';
 import { SOURCES } from './data/sources.js';
 import { FIGURES } from './data/figures.js';
@@ -123,16 +124,22 @@ function doseShort(ex) {
 
 // Что положено сегодня — расчёт в day.js.
 async function computeDay() {
-  return computeDayFor({ program: PROGRAM, exercises: EXERCISES, log: await logAll(), now: new Date() });
+  return computeDayFor({ program: PROGRAM, units: UNITS, exercises: EXERCISES, log: await logAll(), plan: getPlan(), now: new Date() });
+}
+
+// Удалить сегодняшние записи журнала одного вида: снять «сделано» или «пропущено».
+async function clearToday(id, kind) {
+  const t = today();
+  const rows = (await logAll()).filter((r) => r.kind === kind && r.ex === id && r.date === t);
+  for (const r of rows) await logDelete(r.id);
 }
 
 async function toggleDone(id, isDone) {
   if (isDone) {
-    const t = today();
-    const rows = (await logAll()).filter((r) => r.kind === 'done' && r.ex === id && r.date === t);
-    for (const r of rows) await logDelete(r.id);
+    await clearToday(id, 'done');
   } else {
     await logAdd({ kind: 'done', ex: id, manual: true });
+    await clearToday(id, 'skip');
   }
 }
 
@@ -160,6 +167,11 @@ async function route() {
     lastRoute = 'rules';
     window.scrollTo(0, 0);
     await renderRules(token);
+  } else if (hash === 'plan') {
+    lastRoute = 'plan';
+    window.scrollTo(0, 0);
+    setTab('');
+    renderPlan(app, topBar(true));
   } else {
     const back = lastRoute === 'player';
     lastRoute = 'today';
@@ -173,6 +185,13 @@ app.addEventListener('click', async (e) => {
   if (e.target.closest('[data-sound]')) { toggleSound(); return; }
   if (e.target.closest('[data-backup-save]')) { saveBackup(); return; }
   if (e.target.closest('[data-backup-load]')) { app.querySelector('#backup-file')?.click(); return; }
+  // «… сегодня — в разделе „Голеностоп“»: открыть тот раздел и показать его
+  const go = e.target.closest('[data-goto-part]');
+  if (go) {
+    const d = app.querySelector(`details.part[data-part="${go.dataset.gotoPart}"]`);
+    if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    return;
+  }
   const tick = e.target.closest('.tick-btn');
   if (tick) {
     const done = tick.getAttribute('aria-pressed') === 'true';
@@ -200,24 +219,27 @@ window.addEventListener('scroll', () => document.body.classList.toggle('scrolled
   setMuted(await kvGet('muted', false));
   // Хранилище не открылось — отметки живут только до закрытия. Предупреждаем на всех экранах.
   if (!(await storageOk())) document.getElementById('storage-warn').hidden = false;
+  await loadPlan();
+  wirePlan(app);
   window.addEventListener('hashchange', route);
   route();
 })();
 
 // ---------- Сегодня ----------
-function exItem(ex, done) {
-  return `<li class="ex-item${done ? ' is-done' : ''}">
+function exItem(ex, done, skipped = false) {
+  return `<li class="ex-item${done ? ' is-done' : ''}${skipped ? ' is-skipped' : ''}">
     <button class="tick-btn" type="button" data-ex="${esc(ex.id)}" aria-pressed="${done}" aria-label="Сделано: ${esc(ex.name)}"><span class="tick">${ICON.check}</span></button>
     <a class="ex-row" href="#ex/${encodeURIComponent(ex.id)}">
-      <span class="ex-main"><span class="ex-name">${esc(ex.name)}</span><span class="ex-dose">${esc(doseShort(ex))}</span></span>
+      <span class="ex-main"><span class="ex-name">${esc(ex.name)}</span><span class="ex-dose">${esc(skipped ? 'пропущено сегодня' : doseShort(ex))}</span></span>
       <span class="chev" aria-hidden="true"></span>
     </a>
   </li>`;
 }
 
+// «Сегодня»: только программы, которые по плану сегодня. Остальные — одной строкой «Не сегодня» внизу.
 async function renderToday(token) {
   setTab('today');
-  const { parts, doneToday, courses } = await computeDay();
+  const { parts, doneToday, skippedToday, courses, units, planEmpty } = await computeDay();
   const relax = await kvGet('relax', 3);
   const exs = {};
   const sec = {};
@@ -230,35 +252,49 @@ async function renderToday(token) {
   for (const p of parts) open[p.id] = await kvGet(`open:${p.id}`, true);
   if (token !== renderToken) return;
 
+  const head = (more = '') => `${topBar(false)}
+    <header>
+      <p class="eyebrow">${esc(dayLabel())}</p>
+      <div class="title-row"><h1>Сегодня</h1><a class="plan-link" href="#plan">План</a></div>
+      ${more}
+    </header>`;
+  if (planEmpty) {
+    app.innerHTML = `${head()}
+      <div class="empty">
+        <p><b>Плана пока нет.</b> Выбери программы и как часто их делать — здесь появится список на сегодня.</p>
+        <a class="primary" href="#plan">Собрать план</a>
+      </div>`;
+    return;
+  }
+
+  const list = (g) => `<ol class="ex-list">${g.items.map((id) => exItem(exs[id], doneToday.has(id), skippedToday.has(id))).join('')}</ol>`;
   let total = 0;
   let done = 0;
   let leftSec = 0;
   const partHtml = parts.map((p) => {
+    const groups = p.groups.filter((g) => g.today);
+    if (!groups.length) return '';
     let pTotal = 0;
     let pDone = 0;
     let pSec = 0;
-    const groupsHtml = p.groups.map((g) => {
-      if (!g.rest) {
-        for (const id of g.items) {
-          pTotal += 1;
-          pSec += sec[id];
-          if (doneToday.has(id)) pDone += 1;
-          else leftSec += sec[id];
-        }
+    const groupsHtml = groups.map((g) => {
+      for (const id of g.items) {
+        if (skippedToday.has(id)) continue;
+        pTotal += 1;
+        pSec += sec[id];
+        if (doneToday.has(id)) pDone += 1;
+        else leftSec += sec[id];
       }
-      const list = `<ol class="ex-list">${g.items.map((id) => exItem(exs[id], doneToday.has(id))).join('')}</ol>`;
-      const head = g.title ? `<h3 class="group-title">${esc(g.title)}</h3>` : '';
-      const notes = [g.rest ? '' : g.courseNote, g.note, g.later, g.replacedNote].filter(Boolean).map((n) => `<p class="group-note">${esc(n)}</p>`).join('');
-      const key = `${p.id}:${g.id}`;
-      const body = g.rest
-        ? `<p class="rest">${esc(g.restText || 'Сегодня отдых: силовые были вчера. Следующие — завтра.')}</p>
-           <details class="more" data-group="${esc(key)}"${moreOpen.has(key) ? ' open' : ''}><summary>Показать упражнения</summary>${list}</details>`
-        : list;
-      return `<div class="group">${head}${notes}${body}</div>`;
+      const title = g.title ? `<h3 class="group-title">${esc(g.title)}</h3>` : '';
+      const notes = [g.courseNote, g.note, g.later].filter(Boolean).map((n) => `<p class="group-note">${esc(n)}</p>`).join('');
+      const moved = g.replacedNote
+        ? `<p class="group-note">${esc(g.replacedNote)} <button class="link" type="button" data-goto-part="${esc(g.replacedBy)}">Перейти</button></p>`
+        : '';
+      return `<div class="group">${title}${notes}${list(g)}${moved}</div>`;
     }).join('');
     total += pTotal;
     done += pDone;
-    const meta = pTotal ? `${pDone} из ${pTotal} · ~${minutes(pSec)} мин` : 'сегодня отдых';
+    const meta = pTotal ? `${pDone} из ${pTotal} · ~${minutes(pSec)} мин` : 'всё пропущено';
     return `<details class="part" data-part="${p.id}"${open[p.id] ? ' open' : ''}>
       <summary><span class="part-title">${esc(p.title)}</span><span class="part-meta">${esc(meta)}</span><span class="part-chev" aria-hidden="true"></span></summary>
       <div class="part-body">
@@ -268,25 +304,35 @@ async function renderToday(token) {
     </details>`;
   }).join('');
 
-  const pct = total ? Math.round((100 * done) / total) : 0;
-  const summary = done === total && total > 0
-    ? 'Всё на сегодня сделано'
-    : `Сделано ${done} из ${total} · осталось ~${minutes(leftSec)} мин`;
+  // «Не сегодня»: по программам плана, с причиной — «по плану — в понедельник», «частота не выбрана».
+  const later = new Map();
+  for (const p of parts) for (const g of p.groups) {
+    if (g.today) continue;
+    if (!later.has(g.unit)) later.set(g.unit, { st: units[g.unit], groups: [] });
+    later.get(g.unit).groups.push(g);
+  }
+  const laterHtml = later.size ? `<details class="more not-today" data-group="not-today"${moreOpen.has('not-today') ? ' open' : ''}>
+      <summary>Не сегодня: ${esc([...later.values()].map((x) => x.st.unit.title).join(', '))}</summary>
+      ${[...later.values()].map(({ st, groups }) => `<div class="group">
+        <h3 class="group-title">${esc(st.unit.title)}</h3>
+        <p class="group-note">${esc(st.text[0].toUpperCase() + st.text.slice(1))}.</p>
+        ${groups.map((g) => `${g.title && groups.length > 1 ? `<p class="group-sub">${esc(g.title)}</p>` : ''}${list(g)}`).join('')}
+      </div>`).join('')}
+      <p><a href="#plan">Изменить план</a></p>
+    </details>` : '';
 
-  app.innerHTML = `
-    ${topBar(false)}
-    <header>
-      <p class="eyebrow">${esc(dayLabel())}</p>
-      <h1>Сегодня</h1>
-      <div class="progress">
+  const pct = total ? Math.round((100 * done) / total) : 0;
+  const summary = !total ? 'По плану сегодня отдых.'
+    : done === total ? 'Всё на сегодня сделано'
+      : `Сделано ${done} из ${total} · осталось ~${minutes(leftSec)} мин`;
+
+  app.innerHTML = `${head(`<div class="progress">
         <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}" aria-label="Сделано за сегодня"><span style="width:${pct}%"></span></div>
         <p>${esc(summary)}</p>
-      </div>
-    </header>
-    <div class="parts">${partHtml}</div>`;
+      </div>`)}
+    <div class="parts">${partHtml}${laterHtml}</div>`;
 }
 
-// ---------- Правила ----------
 async function renderRules(token = renderToken) {
   const lastBackup = await kvGet('lastBackup', '');
   if (token !== renderToken) return;
@@ -365,6 +411,7 @@ async function loadBackup(file) {
     return;
   }
   setMuted(await kvGet('muted', false));
+  await loadPlan();
   await renderRules(++renderToken);
   backupStatus(`Копия загружена: ${records(data.log.length)} журнала.`);
 }
@@ -374,13 +421,6 @@ async function loadBackup(file) {
 // его видно с пола. Кнопки — в закреплённой нижней строке: слева «Пропустить» (только до старта)
 // или «Сначала» (на паузе), справа главная. Касание анимации ставит на паузу то, что сейчас идёт.
 
-// Пропущенные сегодня: «Дальше» их больше не предлагает. Помним до перезагрузки страницы.
-const skipped = { day: '', ids: new Set() };
-function skippedToday() {
-  const d = today();
-  if (skipped.day !== d) { skipped.day = d; skipped.ids.clear(); }
-  return skipped.ids;
-}
 let settingsOpenFor = '';
 
 // «Для тебя» — первым пунктом «Следи»: личные замены нельзя пропустить.
@@ -523,7 +563,7 @@ function actionBar() {
 }
 
 async function renderPlayer(id, token) {
-  const { parts, doneToday, log, courses } = await computeDay();
+  const { parts, doneToday, skippedToday, log, courses } = await computeDay();
   const ex = await getEx(id, courses);
   if (!ex) { location.hash = '#today'; return; }
   const goals = await getGoals(ex);
@@ -535,14 +575,16 @@ async function renderPlayer(id, token) {
     const i = g.items.indexOf(id);
     if (i >= 0) crumb = `${p.title}${g.title ? ': ' + g.title.toLowerCase() : ''} · ${i + 1} из ${g.items.length}`;
   }
-  // «Дальше» и «Пропустить» ведут к следующему несделанному и непропущенному; если таких нет — к списку
-  const skip = skippedToday();
-  const flat = parts.flatMap((p) => p.groups.filter((g) => !g.rest).flatMap((g) => g.items));
-  const open = (x) => x !== id && !doneToday.has(x) && !skip.has(x);
+  // «Дальше» и «Пропустить» ведут к следующему несделанному и непропущенному; если таких нет — к списку.
+  // Упражнение не из плана на сегодня (открыли из «Не сегодня») — «Дальше» идёт по его группе.
+  let flat = parts.flatMap((p) => p.groups.filter((g) => g.today).flatMap((g) => g.items));
+  if (!flat.includes(id)) flat = parts.flatMap((p) => p.groups).find((g) => g.items.includes(id))?.items || [];
+  const open = (x) => x !== id && !doneToday.has(x) && !skippedToday.has(x);
   const nextId = flat.slice(flat.indexOf(id) + 1).find(open) || flat.find(open) || null;
   const nextLabel = nextId ? `Дальше: ${EXERCISES[nextId].name}` : 'К списку на сегодня';
   const goNext = () => { location.hash = nextId ? `#ex/${encodeURIComponent(nextId)}` : '#today'; };
-  const skipEx = () => { skip.add(id); goNext(); };
+  // Пропуск на сегодня пишется в журнал: переживает перезагрузку, завтра упражнение снова в списке.
+  const skipEx = async () => { await logAdd({ kind: 'skip', ex: id }); goNext(); };
 
   const isMeasure = ex.timer.type === 'measure';
   const isFree = ex.timer.type === 'free'; // свободная практика: без таймера и норм
@@ -556,7 +598,7 @@ async function renderPlayer(id, token) {
     ${topBar(true, crumb)}
     <header class="ex-head">
       <h1>${esc(ex.name)}</h1>
-      <p class="meta"><span id="goal-text">${esc(goalLine(ex, goals))}</span>${course ? ` · ${esc(course)}` : ''}${doneToday.has(id) ? ' · <span class="done-mark">сегодня сделано</span>' : ''}${settings ? ' <button class="link" type="button" id="edit" aria-expanded="false" aria-controls="settings">изменить</button>' : ''}</p>
+      <p class="meta"><span id="goal-text">${esc(goalLine(ex, goals))}</span>${course ? ` · ${esc(course)}` : ''}${doneToday.has(id) ? ' · <span class="done-mark">сегодня сделано</span>' : ''}${skippedToday.has(id) ? ' · пропущено сегодня <button class="link" type="button" id="unskip">вернуть</button>' : ''}${settings ? ' <button class="link" type="button" id="edit" aria-expanded="false" aria-controls="settings">изменить</button>' : ''}</p>
       ${need ? `<p class="need">Понадобится: ${esc(need)}</p>` : ''}
     </header>
     ${settings ? `<div class="settings" id="settings" hidden>${settings}</div>` : ''}
@@ -583,6 +625,8 @@ async function renderPlayer(id, token) {
       <button class="ghost-btn" type="button" id="act-left" hidden></button>
       <button class="primary" type="button" id="go" hidden></button>
     </div>`;
+
+  document.getElementById('unskip')?.addEventListener('click', async () => { await clearToday(id, 'skip'); route(); });
 
   // «изменить» открывает настройки; открытыми они остаются и после смены ступени
   const editBtn = document.getElementById('edit');
