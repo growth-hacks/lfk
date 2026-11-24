@@ -38,7 +38,7 @@ export function estimate(timer, goals = {}, relax = 3) {
   return p.sides.length * p.sets * (p.reps * rep - lastRelax);
 }
 
-export function createRunner(plan, { onEvent = () => {} } = {}) {
+export function createRunner(plan, { onEvent = () => {}, completedSets = 0 } = {}) {
   const st = {
     status: 'ready', // ready | run | paused | between | done
     side: 0, set: 0, rep: 0, phase: 0, t: 0,
@@ -61,14 +61,10 @@ export function createRunner(plan, { onEvent = () => {} } = {}) {
   function endSet() {
     const moreSets = st.set < plan.sets - 1;
     const moreSides = st.side < plan.sides.length - 1;
-    if (moreSets) {
+    if (moreSets || moreSides) {
       st.status = 'between';
-      st.message = `Подход ${st.set + 1} из ${plan.sets} готов`;
-      onEvent('setEnd');
-    } else if (moreSides) {
-      st.status = 'between';
-      st.message = `Теперь: ${plan.sides[st.side + 1]}`;
-      onEvent('setEnd');
+      st.message = moreSets ? `Подход ${st.set + 1} из ${plan.sets} готов` : `Теперь: ${plan.sides[st.side + 1]}`;
+      onEvent('setEnd', st.side * plan.sets + st.set + 1);
     } else {
       st.status = 'done';
       st.message = 'Готово';
@@ -117,17 +113,35 @@ export function createRunner(plan, { onEvent = () => {} } = {}) {
     if (st.rep >= plan.reps) endSet();
   }
 
+  function countSet() {
+    if (plan.type !== 'count' || st.status === 'done') return;
+    if (st.status === 'ready' || st.status === 'between') next();
+    st.rep = plan.reps;
+    endSet();
+    next();
+  }
+
+  if (Number.isInteger(completedSets) && completedSets > 0 && completedSets < plan.sets * plan.sides.length) {
+    // Восстанавливаем границу между подходами. Таймер ждёт явного старта.
+    st.side = Math.floor((completedSets - 1) / plan.sets);
+    st.set = (completedSets - 1) % plan.sets;
+    st.rep = plan.reps;
+    st.status = 'between';
+    st.message = `Готово подходов: ${completedSets} из ${plan.sets * plan.sides.length}`;
+    if (plan.type === 'count') next();
+  }
+
   return {
     state: st,
     plan,
     next,
     tick,
     countRep,
+    countSet,
     // Начать текущий подход заново (кнопка «Заново» во время выполнения).
     restartSet() { if (st.status === 'run' || st.status === 'paused') startSet(); },
     pause() { if (st.status === 'run') st.status = 'paused'; },
     resume() { if (st.status === 'paused') st.status = 'run'; },
-    finishNow() { st.status = 'done'; st.message = 'Готово'; onEvent('done'); },
     get phase() { return plan.phases[st.phase] || null; },
     get phaseU() { const ph = plan.phases[st.phase]; return ph ? Math.min(1, st.t / ph.dur) : 0; },
     get remaining() { const ph = plan.phases[st.phase]; return ph ? Math.max(0, ph.dur - st.t) : 0; },

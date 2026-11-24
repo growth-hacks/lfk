@@ -123,20 +123,20 @@ function doseShort(ex) {
 }
 
 // Что положено сегодня — расчёт в day.js.
-async function computeDay() {
-  return computeDayFor({ program: PROGRAM, units: UNITS, exercises: EXERCISES, log: await logAll(), plan: getPlan(), now: new Date() });
+async function computeDay(now = new Date()) {
+  return computeDayFor({ program: PROGRAM, units: UNITS, exercises: EXERCISES, log: await logAll(), plan: getPlan(), now });
 }
 
-// Удалить сегодняшние записи журнала одного вида: снять «сделано» или «пропущено».
-async function clearToday(id, kind) {
+// Удалить сегодняшние записи журнала выбранных видов.
+async function clearToday(id, ...kinds) {
   const t = today();
-  const rows = (await logAll()).filter((r) => r.kind === kind && r.ex === id && r.date === t);
+  const rows = (await logAll()).filter((r) => kinds.includes(r.kind) && r.ex === id && r.date === t);
   for (const r of rows) await logDelete(r.id);
 }
 
 async function toggleDone(id, isDone) {
   if (isDone) {
-    await clearToday(id, 'done');
+    await clearToday(id, 'done', 'set');
   } else {
     await logAdd({ kind: 'done', ex: id, manual: true });
     await clearToday(id, 'skip');
@@ -564,7 +564,9 @@ function actionBar() {
 }
 
 async function renderPlayer(id, token) {
-  const { parts, doneToday, skippedToday, log, courses } = await computeDay();
+  const now = new Date();
+  const date = today(now);
+  const { parts, doneToday, skippedToday, log, courses } = await computeDay(now);
   const ex = await getEx(id, courses);
   if (!ex) { location.hash = '#today'; return; }
   const goals = await getGoals(ex);
@@ -791,10 +793,11 @@ async function renderPlayer(id, token) {
     return;
   }
 
-  wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipEx, setStageTap: (fn) => { onStageTap = fn; } });
+  const entries = log.filter((r) => r.ex === id && r.date === date);
+  wireRunner({ ex, entries, goals, relax, stage, m, pose, nextLabel, goNext, skipEx, setStageTap: (fn) => { onStageTap = fn; } });
 }
 
-function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipEx, setStageTap }) {
+function wireRunner({ ex, entries, goals, relax, stage, m, pose, nextLabel, goNext, skipEx, setStageTap }) {
   const el = (i) => document.getElementById(i);
   const phaseEl = el('phase');
   const countEl = el('count');
@@ -812,7 +815,7 @@ function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipE
   let speed = 1;
   let previewT = 0;
   let previewPaused = false;
-  let doneLogged = false;
+  let lastSave = null;
   let raf = 0;
   let runner;
 
@@ -820,23 +823,44 @@ function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipE
   const setText = (node, s) => { if (texts.get(node) !== s) { node.textContent = s; texts.set(node, s); } };
   const setHTML = (node, s) => { if (texts.get(node) !== s) { node.innerHTML = s; texts.set(node, s); } };
 
-  function makeRunner() {
-    runner = createRunner(buildPlan(ex.timer, goals, relax), {
-      onEvent(e) {
+  function makeRunner(savedEntries = []) {
+    const plan = buildPlan(ex.timer, goals, relax);
+    const durations = plan.phases.filter((ph) => ph.kind !== 'relax').map((ph) => ph.dur);
+    const planKey = JSON.stringify([ex.goalId, ex.stageIndex, ex.session, plan.type, plan.sides, plan.sets, plan.reps, durations]);
+    let completedSets = 0;
+    // Полная отметка закрывает предыдущие подходы, в том числе при повторном запуске в тот же день.
+    for (const row of savedEntries) {
+      if (row.kind === 'done') completedSets = 0;
+      if (row.kind === 'set' && row.planKey === planKey && Number.isInteger(row.completedSets)
+          && row.completedSets < plan.sets * plan.sides.length) {
+        completedSets = Math.max(completedSets, row.completedSets);
+      }
+    }
+    lastSave = null;
+    runner = createRunner(plan, {
+      completedSets,
+      onEvent(e, sets) {
+        if (e === 'setEnd') saveEntry({ kind: 'set', planKey, completedSets: sets });
+        if (e === 'done') {
+          keepAwake(false);
+          saveEntry({ kind: 'done', goals: { ...goals }, level: ex.level ?? null });
+        }
         soundFor(e);
-        if (e === 'done') markDone();
       },
     });
     runner.state.speed = speed;
     syncGoals();
   }
 
-  async function markDone() {
-    if (doneLogged) return;
-    doneLogged = true;
-    keepAwake(false);
-    await logAdd({ kind: 'done', ex: ex.id, goals, level: ex.level ?? null });
-    if (runner.state.status !== 'done') runner.finishNow();
+  async function saveEntry(entry) {
+    const save = { entry: { date: today(), ...entry, ex: ex.id }, status: 'saving' };
+    lastSave = save;
+    try {
+      await logAdd(save.entry);
+      save.status = 'saved';
+    } catch {
+      save.status = 'failed';
+    }
   }
 
   function syncGoals() {
@@ -875,7 +899,6 @@ function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipE
       goals[f] = Math.min(hi, Math.max(lo, goals[f] + d * RANGED[f].step));
       await kvSet(`goal:${ex.goalId}:${f}`, goals[f]);
     }
-    doneLogged = false;
     makeRunner();
   });
 
@@ -893,21 +916,14 @@ function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipE
     runner.next();
   }
   function restart() {
-    keepAwake(false);
-    makeRunner();
-    previewT = 0;
-    previewPaused = false;
+    keepAwake(true);
+    runner.restartSet();
   }
   // Счётные упражнения: повторы считаешь сам, одно нажатие — на подход.
   function countSetDone() {
-    const st = runner.state;
-    const plan = runner.plan;
     unlockAudio();
     keepAwake(true);
-    if (st.status === 'ready') { st.status = 'run'; st.side = 0; st.set = 0; }
-    if (st.set < plan.sets - 1) { st.set += 1; soundFor('setEnd'); }
-    else if (st.side < plan.sides.length - 1) { st.side += 1; st.set = 0; soundFor('setEnd'); }
-    else runner.finishNow();
+    runner.countSet();
   }
   // На кнопке коротко. Какой подход и какая нога — на плашке анимации и под крупным счётом.
   function countLabel() {
@@ -948,6 +964,10 @@ function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipE
     const plan = runner.plan;
     const running = st.status === 'run' || st.status === 'paused';
     const timed = running && !isCount && runner.phase;
+    const failed = lastSave?.status === 'failed';
+    const retry = failed ? ['Повторить запись', () => {
+      if (lastSave?.status === 'failed') saveEntry(lastSave.entry);
+    }] : null;
 
     // поза манекена: какая фаза, сколько от неё прошло, какая сторона и какой повтор
     if (pose && m) {
@@ -1006,8 +1026,9 @@ function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipE
         sub = st.message;
       } else if (st.status === 'done') {
         word = 'Готово';
-        sub = 'записал в журнал';
+        sub = lastSave?.status === 'saved' ? 'записал в журнал' : 'записываю в журнал';
       }
+      if (failed) sub = 'Не удалось сохранить отметку';
       setHTML(btNum, n);
       btNum.hidden = !n;
       setText(btWord, word);
@@ -1017,12 +1038,12 @@ function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipE
 
     // нижние кнопки
     if (st.status === 'ready') setActions(['Пропустить', skipEx], isCount ? [countLabel(), countSetDone] : ['Начать', start]);
-    else if (st.status === 'run') setActions(null, isCount ? [countLabel(), countSetDone] : ['Пауза', () => runner.pause()]);
+    else if (st.status === 'run') setActions(retry, isCount ? [countLabel(), countSetDone] : ['Пауза', () => runner.pause()]);
     else if (st.status === 'paused') setActions(['Сначала', restart], ['Продолжить', start]);
     else if (st.status === 'between') {
       const nextSide = st.set >= plan.sets - 1 ? plan.sides[st.side + 1] : null;
-      setActions(null, [nextSide ? `Начать: ${nextSide}` : 'Следующий подход', start]);
-    } else if (st.status === 'done') setActions(null, [nextLabel, goNext]);
+      setActions(retry, [nextSide ? `Начать: ${nextSide}` : 'Следующий подход', start]);
+    } else if (st.status === 'done') setActions(retry, [nextLabel, goNext]);
     el('goals')?.classList.toggle('locked', running || st.status === 'between');
   }
 
@@ -1043,7 +1064,7 @@ function wireRunner({ ex, goals, relax, stage, m, pose, nextLabel, goNext, skipE
   }
   document.addEventListener('visibilitychange', onVisibility);
 
-  makeRunner();
+  makeRunner(entries);
   update(0);
   raf = requestAnimationFrame(frame);
   if (new URLSearchParams(location.search).has('debug')) {
