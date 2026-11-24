@@ -4,7 +4,7 @@
 import { PROGRAM, UNITS } from './data/program.js';
 import { EXERCISES } from './data/exercises.js';
 import { kvGet, kvSet, today } from './store.js';
-import { modeLabel, WEEKDAY_SHORT } from './day.js';
+import { modeLabel, orderParts, WEEKDAY_SHORT } from './day.js';
 
 const plan = { units: {}, order: [], hidden: [] };
 
@@ -43,10 +43,6 @@ function suggestStart(id) {
   return others.length - later > later ? tomorrow() : t;
 }
 
-function partsInOrder() {
-  const rank = (p) => { const i = plan.order.indexOf(p.id); return i < 0 ? plan.order.length + PROGRAM.indexOf(p) : i; };
-  return [...PROGRAM].sort((a, b) => rank(a) - rank(b));
-}
 const groupsOf = (u) => PROGRAM.flatMap((p) => p.groups).filter((g) => u.groups.includes(g.id));
 
 function unitHtml(u, single) {
@@ -93,7 +89,7 @@ function unitHtml(u, single) {
 }
 
 function listHtml() {
-  return partsInOrder().map((p) => {
+  return orderParts(PROGRAM, plan.order).map((p) => {
     const units = UNITS.filter((u) => u.part === p.id);
     const handle = reorder ? `<span class="pu-handle" tabindex="0" role="button" aria-label="${esc(p.title)}: перетащи или двигай стрелками вверх и вниз">≡</span>` : '';
     return `<section class="plan-part${reorder ? ' is-sorting' : ''}" data-part="${esc(p.id)}">

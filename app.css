@@ -18,6 +18,7 @@
   --accent: #1F7A5C;
   --accent-ink: #FFFFFF;
   --accent-soft: #DCEFE6;
+  --journal-amber: #A15D0C;
   --cue: #E0761C;
   --cue-text: #9E4D0A;
   --cue-soft: #FBEBDD;
@@ -37,6 +38,7 @@
   :root:not([data-theme="light"]) {
     --bg: #0F1513; --surface: #161F1B; --ink: #E5EDE9; --muted: #9AABA3; --line: #2B3833; --chip: #212D28;
     --accent: #4DC59D; --accent-ink: #062419; --accent-soft: #173328; --cue: #F39A4A; --cue-text: #F6B47A; --cue-soft: #3A2716;
+    --journal-amber: #D78B25;
     --stage: #1A2420; --floor: #26332E; --overlay: rgba(22, 31, 27, .86);
     --fig: #D3E0D9; --fig-far: #5B6D65; --skin: #22302A; --wall: #2C3A34; --floor-line: #4E5F58;
     color-scheme: dark;
@@ -45,6 +47,7 @@
 :root[data-theme="dark"] {
   --bg: #0F1513; --surface: #161F1B; --ink: #E5EDE9; --muted: #9AABA3; --line: #2B3833; --chip: #212D28;
   --accent: #4DC59D; --accent-ink: #062419; --accent-soft: #173328; --cue: #F39A4A; --cue-text: #F6B47A; --cue-soft: #3A2716;
+  --journal-amber: #D78B25;
   --stage: #1A2420; --floor: #26332E; --overlay: rgba(22, 31, 27, .86);
   --fig: #D3E0D9; --fig-far: #5B6D65; --skin: #22302A; --wall: #2C3A34; --floor-line: #4E5F58;
   color-scheme: dark;
@@ -354,6 +357,39 @@ ol.steps li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
 .result { display: grid; gap: 6px; }
 .result p { font-size: 15px; }
 .history { display: grid; gap: 4px; font-size: 15px; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* ---------- журнал ---------- */
+.journal-period { margin-top: 4px; color: var(--muted); font-size: 14px; }
+.journal-week { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.journal-grid { display: grid; grid-template-columns: minmax(0, 51%) repeat(7, minmax(0, 1fr)); align-items: center; }
+.journal-dates { min-height: 42px; color: var(--muted); font-size: 11px; }
+.journal-dates > span { align-self: stretch; display: grid; align-content: center; justify-items: center; }
+.journal-dates > span:first-child { justify-items: start; padding-left: 10px; font-size: 12px; }
+.journal-dates time { color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; }
+.journal-dates .journal-today { background: var(--accent-soft); }
+.journal-today time { color: var(--accent); font-weight: 600; }
+.journal-dates .journal-future { opacity: .65; }
+.journal-future time { color: var(--muted); }
+.journal-group { border-top: 1px solid var(--line); }
+.journal-group > summary { min-height: 56px; list-style: none; cursor: pointer; background: var(--bg); }
+.journal-group > summary::-webkit-details-marker { display: none; }
+.journal-group > summary:focus-visible { outline-offset: -3px; }
+.journal-row-label { display: grid; min-width: 0; gap: 2px; padding: 7px 4px 7px 10px; line-height: 1.3; overflow-wrap: anywhere; }
+.journal-row-label small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.journal-section-label { grid-template-columns: 9px minmax(0, 1fr); align-items: baseline; column-gap: 5px; }
+.journal-section-label small { grid-column: 2; }
+.journal-section-label b { font-weight: 600; }
+.journal-chevron { width: 7px; height: 7px; border: solid var(--muted); border-width: 1.5px 1.5px 0 0; transform: rotate(45deg); }
+.journal-group[open] .journal-chevron { transform: rotate(135deg); }
+.journal-exercises { margin: 0; padding: 0; list-style: none; }
+.journal-exercises li { min-height: 48px; border-top: 1px solid var(--line); }
+.journal-exercises .journal-row-label { padding-left: 24px; font-size: 14px; }
+.journal-mark { display: block; justify-self: center; width: 8px; height: 1px; background: var(--muted); opacity: .65; }
+.journal-mark.future { visibility: hidden; }
+.journal-mark.done { width: 9px; height: 9px; border-radius: 50%; background: var(--journal-amber); opacity: 1; }
+.journal-group summary .journal-mark.done, .journal-mark.journal-section-mark { width: 12px; height: 12px; border-radius: 4px; background: var(--accent); }
+.journal-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 9px 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.journal-legend span { display: flex; align-items: center; gap: 6px; }
 
 /* ---------- правила ---------- */
 .rules { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }

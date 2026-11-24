@@ -14,6 +14,11 @@ export function plural(n, [one, few, many]) {
 const WEEKDAY_TO = ['в воскресенье', 'в понедельник', 'во вторник', 'в среду', 'в четверг', 'в пятницу', 'в субботу'];
 export const WEEKDAY_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 
+export function orderParts(program, order = []) {
+  const rank = (p) => { const i = order.indexOf(p.id); return i < 0 ? order.length + program.indexOf(p) : i; };
+  return [...program].sort((a, b) => rank(a) - rank(b));
+}
+
 // Курс (голеностоп): какое по счёту занятие. Занятие = день, в который в группе есть хотя бы одна отметка «сделано».
 export function courseState(g, log, t) {
   const ids = new Set(g.items.map((i) => i.ex));
@@ -93,9 +98,7 @@ export function computeDay({ program, units = [], exercises, log, plan = {}, now
   for (const p of program) for (const g of p.groups) if (g.course) courses[g.id] = courseState(g, log, t);
   const groupToday = (gid) => unitStates[unitOf[gid]]?.status === 'today';
 
-  const order = plan.order || [];
-  const rank = (p) => { const i = order.indexOf(p.id); return i < 0 ? order.length + program.indexOf(p) : i; };
-  const parts = [...program].sort((a, b) => rank(a) - rank(b)).map((p) => ({
+  const parts = orderParts(program, plan.order || []).map((p) => ({
     ...p,
     groups: p.groups.map((g) => {
       const items = [];

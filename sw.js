@@ -2,7 +2,7 @@
 // Сначала пробуем сеть (чтобы видеть свежую версию), без сети — берём из кеша.
 // При выкладке новой версии поменяй VERSION — старый кеш удалится.
 
-const VERSION = 'lfk-v21';
+const VERSION = 'lfk-v23';
 const ASSETS = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const ASSETS = [
   './store.js',
   './timer.js',
   './day.js',
+  './journal.js',
   './plan.js',
   './backup.js',
   './manifest.webmanifest',

@@ -2,6 +2,7 @@
 import { EXERCISES, WEIGHT_RULE, WEIGHT_START, BAND_NAMES } from './data/exercises.js';
 import { PROGRAM, UNITS } from './data/program.js';
 import { loadPlan, getPlan, renderPlan, wirePlan } from './plan.js';
+import { computeJournal, JOURNAL_START_KEY, renderJournal } from './journal.js';
 import { PROFILE } from './data/profile.js';
 import { SOURCES } from './data/sources.js';
 import { FIGURES } from './data/figures.js';
@@ -147,6 +148,7 @@ async function toggleDone(id, isDone) {
 // Возврат из упражнения на «Сегодня» — к тому же месту списка, а не в начало.
 let lastRoute = '';
 let todayScroll = 0;
+let markWrites = Promise.resolve();
 // Раскрытые «Показать упражнения» в группах, где сегодня отдых. Помним, пока открыто приложение:
 // иначе после выхода из упражнения список закрывается, и место в нём теряется.
 const moreOpen = new Set();
@@ -167,6 +169,21 @@ async function route() {
     lastRoute = 'rules';
     window.scrollTo(0, 0);
     await renderRules(token);
+  } else if (hash === 'journal') {
+    lastRoute = 'journal';
+    setTab('journal');
+    await markWrites;
+    if (token !== renderToken) return;
+    const [log, firstDay] = await Promise.all([logAll(), kvGet(JOURNAL_START_KEY, '')]);
+    if (token !== renderToken) return;
+    const journal = computeJournal({ log, plan: getPlan(), firstDay });
+    if (journal.startToSave) {
+      // Ошибка сохранения даты не должна мешать открыть сам журнал.
+      await kvSet(JOURNAL_START_KEY, journal.startToSave).catch(() => {});
+    }
+    if (token !== renderToken) return;
+    renderJournal(app, journal, esc);
+    window.scrollTo(0, 0);
   } else if (hash === 'plan') {
     lastRoute = 'plan';
     window.scrollTo(0, 0);
@@ -193,12 +210,14 @@ app.addEventListener('click', async (e) => {
     return;
   }
   const tick = e.target.closest('.tick-btn');
-  if (tick) {
+  if (tick && lastRoute === 'today') {
     const done = tick.getAttribute('aria-pressed') === 'true';
     tick.setAttribute('aria-pressed', String(!done)); // сразу, не дожидаясь записи
     tick.closest('.ex-item').classList.toggle('is-done', !done);
-    await toggleDone(tick.dataset.ex, done);
-    await renderToday(++renderToken);
+    const write = markWrites.then(() => toggleDone(tick.dataset.ex, done));
+    markWrites = write.catch(() => {});
+    await write;
+    if (lastRoute === 'today') await renderToday(++renderToken);
   }
 });
 app.addEventListener('change', (e) => {
@@ -406,13 +425,19 @@ async function loadBackup(file) {
   if (input) input.value = '';
   if (!ok) return;
   try {
-    await replaceAll(data);
+    // Копия переносит тренировки и план. Режим первого показа определяется заново.
+    const kv = data.kv.filter(([key]) => key !== JOURNAL_START_KEY);
+    await replaceAll({ kv, log: data.log });
   } catch (err) {
     backupStatus('Не получилось записать копию в хранилище телефона. Данные на телефоне не изменились.');
     return;
   }
   setMuted(await kvGet('muted', false));
   await loadPlan();
+  if (lastRoute !== 'rules') {
+    await route();
+    return;
+  }
   await renderRules(++renderToken);
   backupStatus(`Копия загружена: ${records(data.log.length)} журнала.`);
 }
